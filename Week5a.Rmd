@@ -1,0 +1,161 @@
+---
+title: "Week5a"
+author: "Zihao Yu"
+date: "2026-02-26"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# 1.How will I tackle the problem?
+I will input the data into a spreadsheet and export it as a CSV file. Then, I will read the data into R and perform data cleaning. Finally, I will complete the assignment requirements (comparing user spreadsheets, apply Simpson's Paradox, etc.).
+
+# 2.What data challenges do I anticipate?
+During computation and aggregation, prevent incorrect values or improper handling of missing data from affecting the final interpretation. I will verify the understanding of LLM-generated code before applying it.
+
+source: "https://raw.githubusercontent.com/XxY-coder/data607-week5a.Y/refs/heads/main/airlines.csv"
+
+
+# 3. Transformed data from wide to long format.
+
+```{r}
+library(tidyverse)
+library(janitor)
+
+airlines_df <- read.csv("https://raw.githubusercontent.com/XxY-coder/data607-week5a.Y/refs/heads/main/airlines.csv")
+names(airlines_df)
+
+head(airlines_df)
+```
+
+rename and clean the NA values.
+```{r}
+flights_df <-
+  airlines_df %>%
+  rename(
+    airline = X,
+    flight_condition = X.1,
+) %>%
+  mutate(airline = na_if(airline, "")) %>%
+  fill(airline, 
+       .direction = "down") %>%
+  pivot_longer(
+    cols = c("LOS.Angeles", "Phoenix", "San.Diego", "San.Francisco", "Seattle"), 
+    names_to = "City", 
+    values_to = "Count",
+    values_drop_na = TRUE
+  )
+flights_df
+```
+
+# 3.Compared percentage of either delays or arrival rates for two airlines overall
+
+```{r}
+overall_delay_compare <- 
+  flights_df %>%
+  group_by(airline, flight_condition) %>%
+  summarise(
+    total_flight = sum(Count),
+    .groups = 'drop') %>%
+  group_by(airline) %>%
+  mutate(percentage = round(total_flight / sum(total_flight) * 100,2)) %>%
+  filter(flight_condition == "delayed")
+overall_delay_compare
+```
+
+```{r}
+overall_onTime_compare <- 
+  flights_df %>%
+  group_by(airline, flight_condition) %>%
+  summarise(
+    total_flight = sum(Count),
+    .groups = 'drop') %>%
+  group_by(airline) %>%
+  mutate(percentage = round(total_flight / sum(total_flight) * 100, 2)) %>%
+  filter(flight_condition == "on time")
+overall_onTime_compare
+```
+
+```{r}
+overall_compare <-
+  bind_rows(
+    overall_onTime_compare,
+    overall_delay_compare
+  )
+overall_compare
+```
+```{r}
+ggplot(
+  overall_compare,
+  aes(x=airline, y = percentage, fill = flight_condition)
+) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = percentage),vjust = -0.8, size = 4) +
+  labs(title = "Overall Flight Conditions Percentage by Airline", 
+       x = "Airline", 
+       y = "Percentage (%)") +
+  theme_minimal() +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.3)))
+```
+
+By overall proportion, AMWEST's on-time rate is approximately 89.11%, with a delay rate of about 10.89%; ALASKA's on-time rate is approximately 86.73%, with a delay rate of about 13.27%.
+
+AMWEST's delay rate is approximately 2.38 percentage lower than ALASKA's, while its on-time rate is correspondingly about 2.38 percentage higher. Therefore, MWEST's performance is superior to ALASKA's.
+
+--------------------------------------------------------------------------------
+# 4.Compare by each cites.
+
+```{r}
+city_delay <-
+  flights_df %>%
+  group_by(airline, City, flight_condition) %>%
+  summarise(city_flights = sum(Count), 
+            .groups = 'drop') %>%
+  group_by(airline, City) %>%
+  mutate(percentage = round(city_flights / sum(city_flights) * 100,2)) %>%
+  filter(flight_condition == "delayed")
+city_delay
+```
+
+```{r}
+city_onTime <-
+  flights_df %>%
+  group_by(airline, City, flight_condition) %>%
+  summarise(city_flights = sum(Count), 
+            .groups = 'drop') %>%
+  group_by(airline, City) %>%
+  mutate(percentage = round(city_flights / sum(city_flights) * 100,2)) %>%
+  filter(flight_condition == "on time")
+city_onTime
+```
+
+```{r}
+city_compare <-
+  bind_rows(
+    city_onTime,
+    city_delay
+  )
+city_compare
+```
+
+```{r}
+ggplot(city_compare, aes(x = City, y = percentage, fill = flight_condition)) +
+  geom_col() +
+  facet_wrap(~ airline) +
+  geom_text(aes(label = round(percentage, 2)),
+            position = position_stack(vjust = 0.5),
+            size = 4) +
+  labs(
+    title = "On-time vs Delayed Percentage Across Cities",
+    x = "City",
+    y = "Percentage (%)",
+    fill = "Status"
+  ) +
+  theme_minimal()
+```
+
+According to the city delay rate comparison chart, ALASKA's delay rate is generally lower than AMWEST's. ALASKA's delay rates across five cities range from 5.15% to 16.86%; AMWEST exhibits higher overall delays, with San Francisco at approximately 28.73% and Seattle at 23.28%. Comparing city-specific delay rates, ALASKA maintains lower delays.
+
+# 5.Conclusion
+When comparing by city, ALASKA had lower delay rates than AMWEST in all five cities; however, when combining all cities, AMWEST's overall delay rate was lower. This is a typical example of Simpson's paradox.
+
